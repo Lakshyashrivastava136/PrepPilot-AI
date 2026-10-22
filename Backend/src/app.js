@@ -14,11 +14,17 @@ app.use(cors({
 /* require all the routes here */
 const authRouter = require("./routes/auth.routes")
 const interviewRouter = require("./routes/interview.routes")
+const mockRouter = require("./routes/mock.routes")
+const analyticsRouter = require("./routes/analytics.routes")
+const atsRouter = require("./routes/ats.routes")
 
 
 /* using all the routes here */
 app.use("/api/auth", authRouter)
 app.use("/api/interview", interviewRouter)
+app.use("/api/mock", mockRouter)
+app.use("/api/analytics", analyticsRouter)
+app.use("/api/ats", atsRouter)
 
 
 

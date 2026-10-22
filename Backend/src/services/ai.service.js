@@ -7,6 +7,51 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GOOGLE_GENAI_API_KEY
 })
 
+const PRIMARY_MODEL = "gemini-3-flash-preview"
+const FALLBACK_MODEL = "gemini-2.5-flash"
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Calls Gemini with retry and a fallback model.
+ * Retries only on temporary errors (429, 500, 503, 504).
+ */
+async function generateContentWithRetry({ contents, config }) {
+    const attempts = [
+        { model: PRIMARY_MODEL, delay: 0 },
+        { model: PRIMARY_MODEL, delay: 1500 },
+        { model: FALLBACK_MODEL, delay: 1500 },
+    ]
+
+    let lastError
+
+    for (const attempt of attempts) {
+        if (attempt.delay) {
+            await sleep(attempt.delay)
+        }
+
+        try {
+            return await ai.models.generateContent({
+                model: attempt.model,
+                contents,
+                config
+            })
+        } catch (err) {
+            lastError = err
+
+            const isTemporary = [ 429, 500, 503, 504 ].includes(err.status)
+
+            if (!isTemporary) {
+                throw err
+            }
+
+            console.warn(`Gemini error ${err.status} on ${attempt.model}, retrying...`)
+        }
+    }
+
+    throw lastError
+}
+
 
 const interviewReportSchema = z.object({
     matchScore: z.number().describe("A score between 0 and 100 indicating how well the candidate's profile matches the job describe"),
@@ -41,8 +86,7 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
                         Job Description: ${jobDescription}
 `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+    const response = await generateContentWithRetry({
         contents: prompt,
         config: {
             responseMimeType: "application/json",
@@ -95,8 +139,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
                         The resume should not be so lengthy, it should ideally be 1-2 pages long when converted to PDF. Focus on quality rather than quantity and make sure to include all the relevant information that can increase the candidate's chances of getting an interview call for the given job description.
                     `
 
-    const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+    const response = await generateContentWithRetry({
         contents: prompt,
         config: {
             responseMimeType: "application/json",
@@ -113,4 +156,74 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
 
 }
 
-module.exports = { generateInterviewReport, generateResumePdf }
+
+const answerEvaluationSchema = z.object({
+    score: z.number().describe("Score from 0 to 10 for the candidate's answer. 0 means completely wrong or empty, 10 means excellent."),
+    feedback: z.string().describe("Honest, specific feedback on the answer: what was good, what was missing or wrong. 2-4 sentences."),
+    improvedAnswer: z.string().describe("A strong sample answer to this question that the candidate can learn from. Keep it concise and natural.")
+})
+
+async function evaluateAnswer({ jobTitle, question, intention, answer }) {
+
+    const prompt = `You are a strict but fair interviewer for the role: ${jobTitle}.
+                        Interview question: ${question}
+                        What the interviewer wants to find out: ${intention}
+                        Candidate's answer: ${answer}
+
+                        Evaluate the candidate's answer. Be honest, do not inflate the score.
+                        If the answer is empty, irrelevant or just a few meaningless words, give a score of 0 or 1.`
+
+    const response = await generateContentWithRetry({
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(answerEvaluationSchema),
+        }
+    })
+
+    return JSON.parse(response.text)
+}
+
+
+const atsAnalysisSchema = z.object({
+    atsScore: z.number().describe("Overall ATS compatibility score from 0 to 100, based on keyword match with the job description, presence of standard sections, clarity and quantified achievements."),
+    summary: z.string().describe("2-3 sentence honest overall assessment of how well this resume fits the job description for an ATS and a recruiter."),
+    matchedKeywords: z.array(z.string()).describe("Important keywords or skills from the job description that appear in the resume."),
+    missingKeywords: z.array(z.string()).describe("Important keywords or skills from the job description that are missing from the resume."),
+    sections: z.array(z.object({
+        name: z.string().describe("Section name, e.g. Contact Info, Summary, Skills, Experience, Projects, Education"),
+        present: z.boolean().describe("Whether this section is present in the resume"),
+        comment: z.string().describe("One short sentence of feedback about this section")
+    })).describe("Check of the standard resume sections"),
+    formattingIssues: z.array(z.string()).describe("Text-level problems like missing quantified achievements, inconsistent dates, very long bullet points, resume too long or too short. Do not comment on visual layout since only plain text is available."),
+    suggestions: z.array(z.object({
+        priority: z.enum([ "high", "medium", "low" ]).describe("How important this improvement is"),
+        text: z.string().describe("A specific, actionable improvement for the resume")
+    })).describe("Top 5 to 8 specific improvements ordered by importance")
+})
+
+async function analyzeAtsResume({ resume, jobDescription }) {
+
+    const prompt = `You are an ATS (Applicant Tracking System) and an experienced technical recruiter.
+                        Analyze the resume below against the job description.
+                        Be honest and strict, do not inflate the score.
+                        You only have the plain text of the resume, so do not make claims about fonts, colors or visual layout.
+
+                        Resume:
+                        ${resume}
+
+                        Job Description:
+                        ${jobDescription}`
+
+    const response = await generateContentWithRetry({
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: zodToJsonSchema(atsAnalysisSchema),
+        }
+    })
+
+    return JSON.parse(response.text)
+}
+
+module.exports = { generateInterviewReport, generateResumePdf, evaluateAnswer, analyzeAtsResume }

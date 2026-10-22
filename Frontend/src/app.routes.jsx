@@ -4,6 +4,9 @@ import Register from "./features/auth/pages/Register";
 import Protected from "./features/auth/components/Protected";
 import Home from "./features/interview/pages/Home";
 import Interview from "./features/interview/pages/Interview";
+import MockInterview from "./features/mock/pages/MockInterview";
+import Dashboard from "./features/analytics/pages/Dashboard";
+import AtsAnalyzer from "./features/ats/pages/AtsAnalyzer";
 
 
 export const router = createBrowserRouter([
@@ -19,8 +22,20 @@ export const router = createBrowserRouter([
         path: "/",
         element: <Protected><Home /></Protected>
     },
-    {
+        {
         path:"/interview/:interviewId",
         element: <Protected><Interview /></Protected>
+    },
+    {
+        path: "/mock/:mockId",
+        element: <Protected><MockInterview /></Protected>
+    },
+        {
+        path: "/dashboard",
+        element: <Protected><Dashboard /></Protected>
+    },
+        {
+        path: "/ats",
+        element: <Protected><AtsAnalyzer /></Protected>
     }
 ])

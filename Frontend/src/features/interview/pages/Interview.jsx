@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import '../style/interview.scss'
 import { useInterview } from '../hooks/useInterview.js'
 import { useNavigate, useParams } from 'react-router'
+import { startMockInterview } from '../../mock/services/mock.api.js'
 
 
 
@@ -62,6 +63,21 @@ const Interview = () => {
     const { report, getReportById, loading, getResumePdf } = useInterview()
     const { interviewId } = useParams()
 
+    const navigate = useNavigate()
+    const [ startingMock, setStartingMock ] = useState(false)
+
+    const handleStartMock = async () => {
+        try {
+            setStartingMock(true)
+            const data = await startMockInterview({ interviewReportId: interviewId })
+            navigate(`/mock/${data.mockInterview._id}`)
+        } catch (err) {
+            alert(err.message)
+        } finally {
+            setStartingMock(false)
+        }
+    }
+
     useEffect(() => {
         if (interviewId) {
             getReportById(interviewId)
@@ -102,6 +118,13 @@ const Interview = () => {
                             </button>
                         ))}
                     </div>
+                    <button
+                        onClick={handleStartMock}
+                        disabled={startingMock}
+                        style={{ marginBottom: "0.8rem" }}
+                        className='button primary-button' >
+                        {startingMock ? "Starting..." : "🎤 Start Mock Interview"}
+                    </button>
                     <button
                         onClick={() => { getResumePdf(interviewId) }}
                         className='button primary-button' >
