@@ -1,15 +1,26 @@
 const express = require("express")
 const cookieParser = require("cookie-parser")
 const cors = require("cors")
+const helmet = require("helmet")
+const { apiLimiter, authLimiter } = require("./middlewares/rateLimit.middleware")
 
 const app = express()
 
+// Needed so secure cookies and rate limiting work behind Render's proxy
+app.set("trust proxy", 1)
+
+app.use(helmet())
 app.use(express.json())
 app.use(cookieParser())
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     credentials: true
 }))
+
+/* rate limiting */
+app.use("/api", apiLimiter)
+app.use("/api/auth/login", authLimiter)
+app.use("/api/auth/register", authLimiter)
 
 /* require all the routes here */
 const authRouter = require("./routes/auth.routes")
@@ -18,6 +29,11 @@ const mockRouter = require("./routes/mock.routes")
 const analyticsRouter = require("./routes/analytics.routes")
 const atsRouter = require("./routes/ats.routes")
 
+
+/* health check (used by hosting platforms) */
+app.get("/api/health", (req, res) => {
+    res.status(200).json({ status: "ok" })
+})
 
 /* using all the routes here */
 app.use("/api/auth", authRouter)

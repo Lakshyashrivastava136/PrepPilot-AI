@@ -1,6 +1,7 @@
 const express = require("express")
 const authMiddleware = require("../middlewares/auth.middleware")
 const mockController = require("../controllers/mock.controller")
+const { aiLimiter } = require("../middlewares/rateLimit.middleware")
 
 const mockRouter = express.Router()
 
@@ -16,7 +17,7 @@ mockRouter.post("/start", authMiddleware.authUser, mockController.startMockInter
  * @description submit an answer for a question and get AI feedback
  * @access private
  */
-mockRouter.post("/:id/answer", authMiddleware.authUser, mockController.answerMockQuestionController)
+mockRouter.post("/:id/answer", authMiddleware.authUser, aiLimiter, mockController.answerMockQuestionController)
 
 /**
  * @route GET /api/mock/:id
